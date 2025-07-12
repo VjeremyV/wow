@@ -50,11 +50,11 @@ return [
     ],
 
     'requirements' => [
-       'min-quality' => 95,
-       'min-complexity' => 60,
-       'min-architecture' => 90,
-       'min-style' => 90,
-       'disable-security-check' => true,
+        'min-quality' => 95,
+        'min-complexity' => 60,
+        'min-architecture' => 90,
+        'min-style' => 90,
+        'disable-security-check' => true,
     ],
 
     'threads' => 4,

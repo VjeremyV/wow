@@ -61,11 +61,13 @@ jobs:
       - name: build frontend assets
         run: npm install && npm run build
 
-      - name: Run Tests
-        run: php artisan test
+      - name: Indent Code
+        run: ./vendor/bin/pint
 
-      - name: Stan check
-        run: vendor/bin/phpstan analyse -l 8 app
+      - name: Sanity Check
+        run: |
+          vendor/bin/phpstan analyse -l 8 app
+          php artisan insights --no-ansi --summary --no-interaction
       
-      - name: Insights Check
-        run: php artisan insights --no-ansi --summary --no-interaction
+      - name: Testing
+        run: php artisan test

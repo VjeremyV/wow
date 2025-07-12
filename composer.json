@@ -35,7 +35,10 @@
         }
     },
     "scripts": {
-        "insights-summary": "php artisan insights --summary --no-interaction",
+        "pint-insights": [
+            "./vendor/bin/pint",
+            "php artisan insights --summary --no-interaction"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
