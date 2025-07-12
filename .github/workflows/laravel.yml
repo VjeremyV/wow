@@ -78,7 +78,7 @@ jobs:
           SSH_KEY: ${{ secrets.O2SWITCH_SSH_KEY }}
           SSH_USER: ${{ secrets.O2SWITCH_USER }}
           SSH_HOST: ${{ secrets.O2SWITCH_HOST }}
-          DEPLOY_PATH: ${{ secrets.O2SWITCH_PATH }}
+          DEPLOY_PATH: ${{ secrets.APP_PATH }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_rsa
