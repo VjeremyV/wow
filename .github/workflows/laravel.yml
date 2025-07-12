@@ -95,19 +95,19 @@ jobs:
             echo "➡️ Déplacement dans $DEPLOY_PATH"
             cd $DEPLOY_PATH || { echo "❌ cd $DEPLOY_PATH a échoué"; exit 1; }
 
-            echo "📦 Installation des dépendances PHP (composer)"
-            composer install --no-dev --optimize-autoloader || { echo "❌ composer install a échoué"; exit 1; }
+            # echo "📦 Installation des dépendances PHP (composer)"
+            # composer install --no-dev --optimize-autoloader || { echo "❌ composer install a échoué"; exit 1; }
 
-            echo "📦 Installation des dépendances JS (npm)"
-            npm install || { echo "❌ npm install a échoué"; exit 1; }
+            # echo "📦 Installation des dépendances JS (npm)"
+            # npm install || { echo "❌ npm install a échoué"; exit 1; }
 
-            echo "🛠 Compilation des assets"
-            npm run build || { echo "❌ npm run build a échoué"; exit 1; }
+            # echo "🛠 Compilation des assets"
+            # npm run build || { echo "❌ npm run build a échoué"; exit 1; }
 
-            echo "🗃 Migration de la base de données"
-            php artisan migrate --force || { echo "❌ php artisan migrate a échoué"; exit 1; }
+            # echo "🗃 Migration de la base de données"
+            # php artisan migrate --force || { echo "❌ php artisan migrate a échoué"; exit 1; }
 
-            echo "✅ Déploiement terminé avec succès"
+            # echo "✅ Déploiement terminé avec succès"
           ENDSSH
 
 
