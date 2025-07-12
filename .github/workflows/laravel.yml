@@ -85,3 +85,4 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
 
+          ssh $SSH_USER@$SSH_HOST "php -v && composer -V && npm -v"
