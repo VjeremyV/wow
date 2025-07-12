@@ -72,6 +72,25 @@ jobs:
       - name: Testing
         run: php artisan test
 
+         # Get the public IP of the runner
+      - name: Public IP
+        id: ip
+        uses: haythem/public-ip@v1.3
+
+        # Whitelist the public IP of the runner on the remote server by adding it to the SSH whitelist and wait 65 seconds for the IP to be whitelisted
+      - shell: bash
+        run: |
+          curl -sX GET 'https://${{ secrets.O2SWITCH_USER }}:${{ secrets.O2SWITCH_ENCODED_PASSWORD }}@${{ secrets.O2SWITCH_HOST }}:2083/frontend/o2switch/o2switch-ssh-whitelist/index.live.php' | fgrep 'index.live.php' | fgrep 'index.live.php?r=remove&address=' | cut -d '"' -f 2 | while read ipToRemove
+          do 
+            curl -sX GET 'https://${{ secrets.O2SWITCH_USER }}:${{ secrets.O2SWITCH_ENCODED_PASSWORD }}@${{ secrets.O2SWITCH_HOST }}:2083/frontend/o2switch/o2switch-ssh-whitelist/'$ipToRemove > /dev/null 2>&1
+          done
+          curl -X POST \
+            -d 'whitelist[address]=${{ steps.ip.outputs.ipv4 }}' \
+            -d 'whitelist[port]=22' \
+            'https://${{ secrets.O2SWITCH_USER }}:${{ secrets.O2SWITCH_ENCODED_PASSWORD }}@${{ secrets.O2SWITCH_HOST }}:2083/frontend/o2switch/o2switch-ssh-whitelist/index.live.php?r=add'  > /dev/null 2>&1
+          curl -sX GET 'https://${{ secrets.O2SWITCH_USER }}:${{ secrets.O2SWITCH_ENCODED_PASSWORD }}@${{ secrets.O2SWITCH_HOST }}:2083/frontend/o2switch/o2switch-ssh-whitelist/index.live.php' | fgrep -q '${{ steps.ip.outputs.ipv4 }}' && echo "IP whitelisted"
+          sleep 65
+
       - name: Deployment
         if: github.ref == 'refs/heads/main'
         env:
@@ -85,4 +104,16 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
 
-          ssh $SSH_USER@$SSH_HOST "php -v && composer -V && npm -v"
+          # 1. Déploiement des fichiers
+          rsync -avz --exclude=".git" --exclude="node_modules" --exclude=".htaccess" --delete ./ $SSH_USER@$SSH_HOST:$DEPLOY_PATH
+
+          # 2. Commandes Laravel à distance
+          ssh $SSH_USER@$SSH_HOST << EOF
+            cd $DEPLOY_PATH
+
+            composer install --no-dev --optimize-autoloader
+            npm install
+            npm run build
+            php artisan migrate --force
+          EOF
+
