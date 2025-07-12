@@ -86,29 +86,14 @@ jobs:
           ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
 
           # 1. Déploiement des fichiers
-          rsync -avz -e "ssh -v" --exclude=".git" --exclude="node_modules" --exclude=".htaccess" --delete ./ $SSH_USER@$SSH_HOST:$DEPLOY_PATH
-          
+          rsync -avz --exclude=".git" --exclude="node_modules" --exclude=".htaccess" --delete ./ $SSH_USER@$SSH_HOST:$DEPLOY_PATH
+
           # 2. Commandes Laravel à distance
-          ssh -o StrictHostKeyChecking=no -v $SSH_USER@$SSH_HOST 'bash -s' <<'ENDSSH'
-            set -e
+          ssh $SSH_USER@$SSH_HOST << EOF
+            cd $DEPLOY_PATH
 
-            echo "➡️ Déplacement dans $DEPLOY_PATH"
-            cd $DEPLOY_PATH || { echo "❌ cd $DEPLOY_PATH a échoué"; exit 1; }
+            composer install --no-dev --optimize-autoloader
+            npm install
+            npm run build
+            php artisan migrate --force
 
-            # echo "📦 Installation des dépendances PHP (composer)"
-            # composer install --no-dev --optimize-autoloader || { echo "❌ composer install a échoué"; exit 1; }
-
-            # echo "📦 Installation des dépendances JS (npm)"
-            # npm install || { echo "❌ npm install a échoué"; exit 1; }
-
-            # echo "🛠 Compilation des assets"
-            # npm run build || { echo "❌ npm run build a échoué"; exit 1; }
-
-            # echo "🗃 Migration de la base de données"
-            # php artisan migrate --force || { echo "❌ php artisan migrate a échoué"; exit 1; }
-
-            # echo "✅ Déploiement terminé avec succès"
-          ENDSSH
-
-
-       
