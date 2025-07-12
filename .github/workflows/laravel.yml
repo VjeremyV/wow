@@ -63,3 +63,9 @@ jobs:
 
       - name: Run Tests
         run: php artisan test
+
+      - name: Stan check
+        run: vendor/bin/phpstan analyse -l 8 app
+      
+      - name: Insights Check
+        run: php artisan insights --no-ansi --summary --no-interaction
