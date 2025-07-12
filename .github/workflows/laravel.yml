@@ -55,11 +55,11 @@ jobs:
           cp .env.ci .env
           php artisan key:generate
 
-      - name: Wait for MySQL to be ready
-        run: sleep 15
-
       - name: Run Migrations
         run: php artisan migrate --force
+        
+      - name: build frontend assets
+        run: npm install && npm run build
 
       - name: Run Tests
         run: php artisan test
