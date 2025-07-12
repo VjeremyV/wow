@@ -18,7 +18,7 @@ env:
   APP_URL: http://localhost
 
 jobs:
-  test:
+  ci_laravel:
     runs-on: ubuntu-latest
 
     services:
