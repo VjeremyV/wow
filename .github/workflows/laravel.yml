@@ -6,16 +6,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-
 env:
-  DB_CONNECTION: mysql
-  DB_HOST: 127.0.0.1
-  DB_PORT: 3306
-  DB_DATABASE: laravel_test
-  DB_USERNAME: laravel
-  DB_PASSWORD: secret
-  APP_ENV: testing
-  APP_URL: http://localhost
+  SSH_KEY: ${{ secrets.O2SWITCH_SSH_KEY }}
+  SSH_USER: ${{ secrets.O2SWITCH_USER }}
+  SSH_HOST: ${{ secrets.O2SWITCH_HOST }}
+  DEPLOY_PATH: ${{ secrets.APP_PATH }}
+  O2SWITCH_ENCODED_PASSWORD: ${{ secrets.O2SWITCH_ENCODED_PASSWORD }}
+  IP_TO_KEEP: ${{ secrets.IP_TO_KEEP }}
 
 jobs:
   ci_laravel:
@@ -56,6 +53,15 @@ jobs:
           php artisan key:generate
 
       - name: Run Migrations
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: laravel_test
+          DB_USERNAME: laravel
+          DB_PASSWORD: secret
+          APP_ENV: testing
+          APP_URL: http://localhost
         run: php artisan migrate --force
         
       - name: build frontend assets
@@ -80,23 +86,31 @@ jobs:
         # Whitelist the public IP of the runner on the remote server by adding it to the SSH whitelist and wait 65 seconds for the IP to be whitelisted
       - shell: bash
         run: |
-          curl -sX GET 'https://${{ secrets.O2SWITCH_USER }}:${{ secrets.O2SWITCH_ENCODED_PASSWORD }}@${{ secrets.O2SWITCH_HOST }}:2083/frontend/o2switch/o2switch-ssh-whitelist/index.live.php' | fgrep 'index.live.php' | fgrep 'index.live.php?r=remove&address=' | cut -d '"' -f 2 | while read ipToRemove
-          do 
-            curl -sX GET 'https://${{ secrets.O2SWITCH_USER }}:${{ secrets.O2SWITCH_ENCODED_PASSWORD }}@${{ secrets.O2SWITCH_HOST }}:2083/frontend/o2switch/o2switch-ssh-whitelist/'$ipToRemove > /dev/null 2>&1
-          done
-          curl -X POST \
-            -d 'whitelist[address]=${{ steps.ip.outputs.ipv4 }}' \
-            -d 'whitelist[port]=22' \
-            'https://${{ secrets.O2SWITCH_USER }}:${{ secrets.O2SWITCH_ENCODED_PASSWORD }}@${{ secrets.O2SWITCH_HOST }}:2083/frontend/o2switch/o2switch-ssh-whitelist/index.live.php?r=add'  > /dev/null 2>&1
-          sleep 65
+          ENDPOINT='frontend/o2switch/o2switch-ssh-whitelist/index.live.php'
+          AUTH_STR="Basic $(echo -n \"$SSH_USER:$O2SWITCH_ENCODED_PASSWORD\" | base64)"
 
+          echo "Get actual whitelisted IPs..."
+          UNIQUE_IPS=$(curl -H "Authorization: $AUTH_STR" -sX GET "https://$SSH_HOST:2083/$ENDPOINT?r=list" | jq -r '.data.list[] | .address' | sort -u)
+          for address in $UNIQUE_IPS; do
+            if [[ "$address" == "$IP_TO_KEEP" ]]; then
+                echo "Keep this IP, go to the next..."
+                continue
+            fi
+
+            echo "Delete this github IP: $address (in & out)"
+            curl -H "Authorization: $AUTH_STR" -H "X-CPANEL-OTP: $OTP" -sX GET "https://$SSH_HOST:2083/$ENDPOINT?r=remove&address=$address&direction=in&port=22" | jq
+            sleep 3
+            curl -H "Authorization: $AUTH_STR" -H "X-CPANEL-OTP: $OTP" -sX GET "https://$SSH_HOST:2083/$ENDPOINT?r=remove&address=$address&direction=out&port=22" | jq
+            sleep 3
+          done
+
+          echo "All non-whitelisted IPs deleted!"
+          echo "Attempt to whitelist IP..."
+          curl -H "Authorization: $AUTH_STR" -H "X-CPANEL-OTP: $OTP" -sX POST -d 'whitelist[address]=${{ steps.ip.outputs.ipv4 }}' -d 'whitelist[port]=22' "https://$SSH_HOST:2083/$ENDPOINT?r=add" | jq
+      
       - name: Deployment
         if: github.ref == 'refs/heads/main'
-        env:
-          SSH_KEY: ${{ secrets.O2SWITCH_SSH_KEY }}
-          SSH_USER: ${{ secrets.O2SWITCH_USER }}
-          SSH_HOST: ${{ secrets.O2SWITCH_HOST }}
-          DEPLOY_PATH: ${{ secrets.APP_PATH }}
+
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_rsa
