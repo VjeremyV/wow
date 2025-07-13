@@ -88,7 +88,7 @@ jobs:
         run: |
           ENDPOINT='frontend/o2switch/o2switch-ssh-whitelist/index.live.php'
           AUTH_STR="Basic $(echo -n \"$SSH_USER:$O2SWITCH_ENCODED_PASSWORD\" | base64)"
-          
+          echo "https://$SSH_HOST/$ENDPOINT?r=list"
           echo "Get actual whitelisted IPs..."
           UNIQUE_IPS=$(curl -H "Authorization: $AUTH_STR" -sX GET "https://$SSH_HOST/$ENDPOINT?r=list" | jq -r '.data.list[] | .address' | sort -u)
           for address in $UNIQUE_IPS; do
