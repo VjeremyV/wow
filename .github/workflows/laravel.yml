@@ -64,7 +64,7 @@ jobs:
           rsync -avz --exclude=".git" --exclude="node_modules" --exclude=".htaccess" --delete ./ $SSH_USER@$SSH_HOST:$DEPLOY_PATH
 
           # # 2. Commandes Laravel à distance
-          ssh $SSH_USER@$SSH_HOST << 'EOF'
+          ssh "$SSH_USER@$SSH_HOST" DEPLOY_PATH="$DEPLOY_PATH" bash -s << 'EOF'
             set -euo pipefail
             echo "🟢 Déplacement dans le dossier $DEPLOY_PATH"
             cd $DEPLOY_PATH
