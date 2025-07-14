@@ -18,66 +18,123 @@ jobs:
   ci_laravel:
     runs-on: ubuntu-latest
 
+    services:
+      mysql:
+        image: mysql:8
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: laravel_test
+          MYSQL_USER: laravel
+          MYSQL_PASSWORD: secret
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u laravel -psecret"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
     steps:
-      - uses: actions/checkout@v3
+       - uses: actions/checkout@v3
 
-      - name: Public IP
-        id: ip
-        uses: haythem/public-ip@v1.3
+        - name: Setup PHP
+          uses: shivammathur/setup-php@v2
+          with:
+            php-version: '8.3'
+            extensions: mbstring, pdo, pdo_mysql
+            tools: composer
 
-      - uses: tecolicom/actions-use-apt-tools@v1
-        with:
-          tools: oathtool gnupg2
+        - name: Install Composer dependencies
+          run: composer install --no-progress --no-interaction --prefer-dist
 
-        # Whitelist the public IP of the runner on the remote server by adding it to the SSH whitelist and wait 65 seconds for the IP to be whitelisted
-      - shell: bash
-        run: |
-          ENDPOINT='frontend/o2switch/o2switch-ssh-whitelist/index.live.php'
-          RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=list" | jq)
-          AUTHORIZED_IPS=$(echo "$RESPONSE" | jq -r '.data.list[] | .address' | sort -u)
+        - name: Setup environment
+          run: |
+            cp .env.ci .env
+            php artisan key:generate
 
-          for address in $AUTHORIZED_IPS; do
-            if [[ "$address" == "$IP_TO_KEEP" ]]; then
-                echo "Keep this IP, go to the next..."
-                continue
-            fi
+        - name: Run Migrations
+          env:
+            DB_CONNECTION: mysql
+            DB_HOST: 127.0.0.1
+            DB_PORT: 3306
+            DB_DATABASE: laravel_test
+            DB_USERNAME: laravel
+            DB_PASSWORD: secret
+            APP_ENV: testing
+            APP_URL: http://localhost
+          run: php artisan migrate --force
+          
+        - name: build frontend assets
+          run: npm install && npm run build
 
-            echo "Delete this IP: $address (in & out)"
-            RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=remove&address=$address&direction=in&port=22" | jq)
-            sleep 3
-            RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=remove&address=$address&direction=out&port=22" | jq)
-            sleep 3
-          done
+        - name: Indent Code
+          run: ./vendor/bin/pint
 
-          RESPONSE=$(curl -sX POST -d 'whitelist[address]=${{ steps.ip.outputs.ipv4 }}' -d 'whitelist[port]=22' "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=add" | jq)
+        - name: Sanity Check
+          run: |
+            vendor/bin/phpstan analyse -l 8 app
+            php artisan insights --no-ansi --summary --no-interaction
+        
+        - name: Testing
+          run: php artisan test
 
-      - name: Deployment
-        if: github.ref == 'refs/heads/main'
+        - name: Public IP
+          id: ip
+          uses: haythem/public-ip@v1.3
 
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
+        - uses: tecolicom/actions-use-apt-tools@v1
+          with:
+            tools: oathtool gnupg2
 
-          # 1. Déploiement des fichiers
-          rsync -avz --exclude=".git" --exclude="node_modules" --exclude=".htaccess" --delete ./ $SSH_USER@$SSH_HOST:$DEPLOY_PATH
+          # Whitelist the public IP of the runner on the remote server by adding it to the SSH whitelist and wait 65 seconds for the IP to be whitelisted
+        - shell: bash
+          run: |
+            ENDPOINT='frontend/o2switch/o2switch-ssh-whitelist/index.live.php'
+            RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=list" | jq)
+            AUTHORIZED_IPS=$(echo "$RESPONSE" | jq -r '.data.list[] | .address' | sort -u)
 
-          # # 2. Commandes Laravel à distance
-          ssh "$SSH_USER@$SSH_HOST" DEPLOY_PATH="$DEPLOY_PATH" bash -s << 'EOF'
-            set -euo pipefail
-            echo "🟢 Déplacement dans le dossier $DEPLOY_PATH"
-            cd $DEPLOY_PATH
+            for address in $AUTHORIZED_IPS; do
+              if [[ "$address" == "$IP_TO_KEEP" ]]; then
+                  echo "Keep this IP, go to the next..."
+                  continue
+              fi
 
-            echo "📦 Installation des dépendances back"
-            composer install --no-dev --optimize-autoloader
+              echo "Delete this IP: $address (in & out)"
+              RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=remove&address=$address&direction=in&port=22" | jq)
+              sleep 3
+              RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=remove&address=$address&direction=out&port=22" | jq)
+              sleep 3
+            done
 
-            echo "📦 Installation des dépendances front"
-            npm install
+            RESPONSE=$(curl -sX POST -d 'whitelist[address]=${{ steps.ip.outputs.ipv4 }}' -d 'whitelist[port]=22' "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=add" | jq)
 
-            echo "🛠 Build du front-end"
-            npm run build
+        - name: Deployment
+          if: github.ref == 'refs/heads/main'
 
-            echo "🗄 Build de la bdd"
-            php artisan migrate --force
-          EOF
+          run: |
+            mkdir -p ~/.ssh
+            echo "$SSH_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
+
+            # 1. Déploiement des fichiers
+            rsync -avz --exclude=".git" --exclude=".env" --exclude="node_modules" --exclude=".htaccess" --delete ./ $SSH_USER@$SSH_HOST:$DEPLOY_PATH
+
+            # # 2. Commandes Laravel à distance
+            ssh "$SSH_USER@$SSH_HOST" DEPLOY_PATH="$DEPLOY_PATH" bash -s << 'EOF'
+              set -euo pipefail
+              echo "🟢 Déplacement dans le dossier $DEPLOY_PATH"
+              cd $DEPLOY_PATH
+
+              echo "📦 Installation des dépendances back"
+              composer install --no-dev --optimize-autoloader
+
+              echo "📦 Installation des dépendances front"
+              npm install
+
+              echo "🛠 Build du front-end"
+              npm run build
+
+              echo "🗄 Build de la bdd"
+              php artisan migrate --force
+            EOF
