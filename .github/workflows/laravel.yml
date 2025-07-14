@@ -7,78 +7,20 @@ on:
   pull_request:
     branches: [main]
 env:
-  SSH_KEY: ${{ secrets.O2SWITCH_SSH_KEY }}
-  SSH_USER: ${{ secrets.O2SWITCH_USER }}
-  SSH_HOST: ${{ secrets.O2SWITCH_HOST }}
+  SSH_KEY: ${{ secrets.SSH_KEY }}
+  SSH_USER: ${{ secrets.SSH_USER }}
+  SSH_HOST: ${{ secrets.SSH_HOST }}
   DEPLOY_PATH: ${{ secrets.APP_PATH }}
-  O2SWITCH_ENCODED_PASSWORD: ${{ secrets.O2SWITCH_ENCODED_PASSWORD }}
+  SSH_PWD: ${{ secrets.SSH_PWD }}
   IP_TO_KEEP: ${{ secrets.IP_TO_KEEP }}
 
 jobs:
   ci_laravel:
     runs-on: ubuntu-latest
 
-    services:
-      mysql:
-        image: mysql:8
-        ports:
-          - 3306:3306
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: laravel_test
-          MYSQL_USER: laravel
-          MYSQL_PASSWORD: secret
-        options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -u laravel -psecret"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
-
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: mbstring, pdo, pdo_mysql
-          tools: composer
-
-      - name: Install Composer dependencies
-        run: composer install --no-progress --no-interaction --prefer-dist
-
-      - name: Setup environment
-        run: |
-          cp .env.ci .env
-          php artisan key:generate
-
-      - name: Run Migrations
-        env:
-          DB_CONNECTION: mysql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_DATABASE: laravel_test
-          DB_USERNAME: laravel
-          DB_PASSWORD: secret
-          APP_ENV: testing
-          APP_URL: http://localhost
-        run: php artisan migrate --force
-        
-      - name: build frontend assets
-        run: npm install && npm run build
-
-      - name: Indent Code
-        run: ./vendor/bin/pint
-
-      - name: Sanity Check
-        run: |
-          vendor/bin/phpstan analyse -l 8 app
-          php artisan insights --no-ansi --summary --no-interaction
-      
-      - name: Testing
-        run: php artisan test
-
-         # Get the public IP of the runner
       - name: Public IP
         id: ip
         uses: haythem/public-ip@v1.3
@@ -90,53 +32,7 @@ jobs:
         # Whitelist the public IP of the runner on the remote server by adding it to the SSH whitelist and wait 65 seconds for the IP to be whitelisted
       - shell: bash
         run: |
+          echo $IP_TO_KEEP
           ENDPOINT='frontend/o2switch/o2switch-ssh-whitelist/index.live.php'
-          AUTH_STR="Basic $(echo -n '$SSH_USER:$O2SWITCH_ENCODED_PASSWORD' | base64)"
-
-          echo "Get actual whitelisted IPs..."
-          RESPONSE=$(curl -H "Authorization: $AUTH_STR" -sX GET "https://$SSH_HOST/$ENDPOINT?r=list" | jq)
+          RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=list" | jq)
           echo "RESPONSE: $RESPONSE"
-          UNIQUE_IPS=$(echo "$RESPONSE" | jq -r '.data.list[] | .address' | sort -u)
-
-          for address in $UNIQUE_IPS; do
-            if [[ "$address" == "$IP_TO_KEEP" ]]; then
-                echo "Keep this IP, go to the next..."
-                continue
-            fi
-
-            echo "Delete this github IP: $address (in & out)"
-            RESPONSE=$(curl -H "Authorization: $AUTH_STR" -sX GET "https://$SSH_HOST/$ENDPOINT?r=remove&address=$address&direction=in&port=22" | jq)
-            echo "RESPONSE: $RESPONSE"
-            sleep 3
-            RESPONSE=$(curl -H "Authorization: $AUTH_STR" -sX GET "https://$SSH_HOST/$ENDPOINT?r=remove&address=$address&direction=out&port=22" | jq)
-            echo "RESPONSE: $RESPONSE"
-            sleep 3
-          done
-
-          echo "All non-whitelisted IPs deleted!"
-          echo "Attempt to whitelist IP..."
-          RESPONSE=$(curl -H "Authorization: $AUTH_STR" -sX POST -d 'whitelist[address]=${{ steps.ip.outputs.ipv4 }}' -d 'whitelist[port]=22' "https://$SSH_USER:$O2SWITCH_ENCODED_PASSWORD@$SSH_HOST/$ENDPOINT?r=add" | jq)
-          echo "RESPONSE: $RESPONSE"
-      
-      - name: Deployment
-        if: github.ref == 'refs/heads/main'
-
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
-
-          # 1. Déploiement des fichiers
-          rsync -avz --exclude=".git" --exclude="node_modules" --exclude=".htaccess" --delete ./ $SSH_USER@$SSH_HOST:$DEPLOY_PATH
-
-          # 2. Commandes Laravel à distance
-          ssh $SSH_USER@$SSH_HOST << EOF
-            cd $DEPLOY_PATH
-
-            composer install --no-dev --optimize-autoloader
-            npm install
-            npm run build
-            php artisan migrate --force
-          EOF
-
