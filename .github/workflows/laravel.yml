@@ -36,3 +36,18 @@ jobs:
           ENDPOINT='frontend/o2switch/o2switch-ssh-whitelist/index.live.php'
           RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=list" | jq)
           echo "RESPONSE: $RESPONSE"
+
+          for address in $UNIQUE_IPS; do
+            if [[ "$address" == "$IP_TO_KEEP" ]]; then
+                echo "Keep this IP, go to the next..."
+                continue
+            fi
+
+            echo "Delete this github IP: $address (in & out)"
+            RESPONSE=$(curl -H "Authorization: $AUTH_STR" -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST/$ENDPOINT?r=remove&address=$address&direction=in&port=22" | jq)
+            echo "RESPONSE: $RESPONSE"
+            sleep 3
+            RESPONSE=$(curl -H "Authorization: $AUTH_STR" -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST/$ENDPOINT?r=remove&address=$address&direction=out&port=22" | jq)
+            echo "RESPONSE: $RESPONSE"
+            sleep 3
+          done
