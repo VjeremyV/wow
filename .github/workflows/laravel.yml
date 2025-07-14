@@ -32,12 +32,11 @@ jobs:
         # Whitelist the public IP of the runner on the remote server by adding it to the SSH whitelist and wait 65 seconds for the IP to be whitelisted
       - shell: bash
         run: |
-          echo $IP_TO_KEEP
           ENDPOINT='frontend/o2switch/o2switch-ssh-whitelist/index.live.php'
-          RESPONSE=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=list" | jq)
+          AUTHORIZED_IPS=$(curl -sX GET "https://$SSH_USER:$SSH_PWD@$SSH_HOST:2083/$ENDPOINT?r=list" | jq)
           echo "RESPONSE: $RESPONSE"
 
-          for address in $UNIQUE_IPS; do
+          for address in $AUTHORIZED_IPS; do
             if [[ "$address" == "$IP_TO_KEEP" ]]; then
                 echo "Keep this IP, go to the next..."
                 continue
