@@ -64,11 +64,20 @@ jobs:
           rsync -avz --exclude=".git" --exclude="node_modules" --exclude=".htaccess" --delete ./ $SSH_USER@$SSH_HOST:$DEPLOY_PATH
 
           # # 2. Commandes Laravel à distance
-          # ssh $SSH_USER@$SSH_HOST << EOF
-          #   cd $DEPLOY_PATH
+          ssh $SSH_USER@$SSH_HOST << 'EOF'
+            set -euo pipefail
+            echo "🟢 Déplacement dans le dossier $DEPLOY_PATH"
+            cd $DEPLOY_PATH
 
-          #   composer install --no-dev --optimize-autoloader
-          #   npm install
-          #   npm run build
-          #   php artisan migrate --force
-          # EOF
+            echo "📦 Installation des dépendances back"
+            composer install --no-dev --optimize-autoloader
+
+            echo "📦 Installation des dépendances front"
+            npm install
+
+            echo "🛠 Build du front-end"
+            npm run build
+
+            echo "🗄 Build de la bdd"
+            php artisan migrate --force
+          EOF
