@@ -4,14 +4,14 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "watch": "concurrently \"php artisan serve\" \"npm run dev\""
+        "watch": "concurrently \"php -S localhost:8000 -t public/\" \"npm run dev\""
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
         "@types/react": "^19.1.2",
         "@types/react-dom": "^19.1.2",
         "@vitejs/plugin-react": "^4.4.1",
-        "axios": "^1.8.2",
+        "axios": "^1.10.0",
         "concurrently": "^9.2.0",
         "laravel-vite-plugin": "^1.2.0",
         "react": "^19.1.0",
