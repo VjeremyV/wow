@@ -43,6 +43,9 @@
         "stan": [
             "./vendor/bin/phpstan analyse -l 8 app"
         ],
+        "unit": [
+            "php artisan test"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
